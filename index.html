@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Unibook Social App</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+
+<style>
+body{font-family:Arial;background:#f2f2f2;margin:0}
+header{background:#0a66c2;color:#fff;padding:12px;text-align:center;font-weight:bold}
+.container{padding:15px}
+.card{background:#fff;padding:15px;border-radius:8px;margin-bottom:10px}
+input,button,textarea{width:100%;padding:10px;margin:6px 0}
+button{background:#0a66c2;color:#fff;border:none;border-radius:5px}
+.post{border-bottom:1px solid #ddd;padding:6px 0;margin-bottom:8px}
+.comment{margin-left:10px;padding:4px;border-left:2px solid #0a66c2}
+.video-post{margin-top:10px}
+.footer{background:#eee;color:#333;text-align:center;padding:8px;margin-top:20px;border-top:1px solid #ccc;}
+.admin-panel{background:#fffae6;padding:10px;border-radius:5px;margin-bottom:10px;}
+</style>
+</head>
+
+<body>
+
+<header>Unibook Social App</header>
+
+<div class="container" id="authBox">
+  <div class="card">
+    <h3>Login / Signup</h3>
+    <input id="email" placeholder="Email">
+    <input id="password" type="password" placeholder="Password">
+    <button onclick="signup()">Signup</button>
+    <button onclick="login()">Login</button>
+    <p id="msg"></p>
+  </div>
+</div>
+
+<div class="container" id="appBox" style="display:none">
+
+  <div class="card">
+    <h4>Create Post</h4>
+    <textarea id="postText" placeholder="Write something..."></textarea>
+    <input type="file" id="videoFile">
+    <button onclick="addPost()">Post</button>
+    <button onclick="logout()">Logout</button>
+  </div>
+
+  <div class="card" id="posts"></div>
+
+  <div class="card">
+    <h4>AI Teacher</h4>
+    <textarea id="aiInput" placeholder="Ask me anything..."></textarea>
+    <button onclick="askAI()">Send</button>
+    <p id="aiResponse"></p>
+  </div>
+
+  <div class="card admin-panel" id="adminPanel" style="display:none;">
+    <h4>Admin Panel</h4>
+    <p>All posts and earnings</p>
+    <div id="adminPosts"></div>
+  </div>
+
+  <div class="footer">
+    Powered by Al-Qasmi Foundation
+  </div>
+
+</div>
+
+<script>
+// Elements
+const authBox = document.getElementById("authBox");
+const appBox = document.getElementById("appBox");
+const posts = document.getElementById("posts");
+const msg = document.getElementById("msg");
+const adminPanel = document.getElementById("adminPanel");
+const adminPosts = document.getElementById("adminPosts");
+
+// Admin setup
+const ADMIN_EMAIL = "admin@unibook.com"; // Replace with your admin email
+
+// OpenAI setup
+const OPENAI_API_KEY = "YOUR_OPENAI_API_KEY"; // Replace with your OpenAI API key
+
+// Firebase config
+firebase.initializeApp({
+  apiKey: "AIzaSyAJgyp_Xb9_0bdHDHXyfGx1yRueaHR412g",
+  authDomain: "unibook-social.firebaseapp.com",
+  projectId: "unibook-social",
+  storageBucket: "unibook-social.appspot.com"
+});
+
+const auth = firebase.auth();
+const db = firebase.firestore();
+const storage = firebase.storage();
+
+// Auth state
+auth.onAuthStateChanged(user=>{
+  authBox.style.display = user ? "none" : "block";
+  appBox.style.display = user ? "block" : "none";
+  if(user) {
+    loadPosts();
+    if(user.email === ADMIN_EMAIL) adminPanel.style.display = "block";
+  }
+});
+
+// Signup/Login
+function signup(){
+  const emailVal = document.getElementById("email").value;
+  const passVal = document.getElementById("password").value;
+  auth.createUserWithEmailAndPassword(emailVal, passVal)
+      .catch(e=>msg.innerText=e.message);
+}
+
+function login(){
+  const emailVal = document.getElementById("email").value;
+  const passVal = document.getElementById("password").value;
+  auth.signInWithEmailAndPassword(emailVal, passVal)
+      .catch(e=>msg.innerText=e.message);
+}
+
+function logout(){ auth.signOut(); }
+
+// Add Post
+function addPost(){
+  const text = document.getElementById("postText").value;
+  const file = document.getElementById("videoFile").files[0];
+  if(!text && !file) return;
+
+  if(file){
+    const storageRef = storage.ref('videos/'+Date.now()+'-'+file.name);
+    storageRef.put(file).then(snap=>{
+      snap.ref.getDownloadURL().then(url=>{
+        db.collection("posts").add({
+          text,
+          video:url,
+          time:Date.now(),
+          likes:0,
+          comments:[],
+          user:auth.currentUser.email
+        });
+        document.getElementById("postText").value="";
+        document.getElementById("videoFile").value="";
+      });
+    });
+  } else {
+    db.collection("posts").add({
+      text,
+      time:Date.now(),
+      likes:0,
+      comments:[],
+      user:auth.currentUser.email
+    });
+    document.getElementById("postText").value="";
+  }
+}
+
+// Load Posts
+function loadPosts(){
+  db.collection("posts").orderBy("time","desc").onSnapshot(snapshot=>{
+    posts.innerHTML="";
+    if(auth.currentUser.email === ADMIN_EMAIL) adminPosts.innerHTML="";
+    snapshot.forEach(doc=>{
+      const data = doc.data();
+      let html = `<div class="post"><b>${data.user || 'User'}:</b> ${data.text || ''}`;
+      if(data.video){
+        html += `<div class="video-post"><video width="100%" controls src="${data.video}"></video></div>`;
+      }
+      html += `<div>
+        <button onclick="likePost('${doc.id}',${data.likes})">Like (${data.likes})</button>
+        <input id="cmt_${doc.id}" placeholder="Comment"><button onclick="addComment('${doc.id}')">Comment</button>
+      </div>`;
+      if(data.comments && data.comments.length>0){
+        data.comments.forEach(c=>{
+          html += `<div class="comment">${c}</div>`;
+        });
+      }
+      html += `</div>`;
+      posts.innerHTML += html;
+
+      // Admin panel
+      if(auth.currentUser.email === ADMIN_EMAIL){
+        const earnings = calculateEarning(data.likes);
+        let adminHtml = `<div class="post"><b>${data.user}:</b> ${data.text || ''} | Likes: ${data.likes} | Earnings - Admin: ${earnings.admin}, User: ${earnings.user}</div>`;
+        adminPosts.innerHTML += adminHtml;
+      }
+    });
+  });
+}
+
+// Like & Comment
+function likePost(id,cur){
+  db.collection("posts").doc(id).update({likes:cur+1});
+}
+
+function addComment(id){
+  const val = document.getElementById("cmt_"+id).value;
+  if(!val) return;
+  const ref = db.collection("posts").doc(id);
+  ref.get().then(d=>{
+    const comments = d.data().comments || [];
+    comments.push(val);
+    ref.update({comments});
+    document.
