@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Unibook Social</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+<style>
+body{font-family:Arial;background:#f2f2f2;margin:0}
+header{background:#0a66c2;color:#fff;padding:12px;text-align:center}
+.container{padding:15px}
+.card{background:#fff;padding:15px;border-radius:8px;margin-bottom:10px}
+input,button,textarea{width:100%;padding:10px;margin:6px 0}
+button{background:#0a66c2;color:#fff;border:none;border-radius:5px}
+.post{border-bottom:1px solid #ddd;padding:6px 0}
+</style>
+</head>
+
+<body>
+
+<header>Unibook Social App</header>
+
+<div class="container" id="authBox">
+  <div class="card">
+    <h3>Login / Signup</h3>
+    <input id="email" placeholder="Email">
+    <input id="password" type="password" placeholder="Password">
+    <button onclick="signup()">Signup</button>
+    <button onclick="login()">Login</button>
+    <p id="msg"></p>
+  </div>
+</div>
+
+<div class="container" id="appBox" style="display:none">
+  <div class="card">
+    <textarea id="postText" placeholder="Write post..."></textarea>
+    <button onclick="addPost()">Post</button>
+    <button onclick="logout()">Logout</button>
+  </div>
+  <div class="card" id="posts"></div>
+</div>
+
+<script>
+const authBox = document.getElementById("authBox");
+const appBox = document.getElementById("appBox");
+const posts = document.getElementById("posts");
+const msg = document.getElementById("msg");
+
+firebase.initializeApp({
+  apiKey: "AIzaSyAJgyp_Xb9_0bdHDHXyfGx1yRueaHR412g",
+  authDomain: "unibook-social.firebaseapp.com",
+  projectId: "unibook-social"
+});
+
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+auth.onAuthStateChanged(user=>{
+  authBox.style.display = user ? "none" : "block";
+  appBox.style.display = user ? "block" : "none";
+  if(user) loadPosts();
+});
+
+function signup(){
+  const emailVal = document.getElementById("email").value;
+  const passVal = document.getElementById("password").value;
+  auth.createUserWithEmailAndPassword(emailVal, passVal)
+      .catch(e=>msg.innerText=e.message);
+}
+
+function login(){
+  const emailVal = document.getElementById("email").value;
+  const passVal = document.getElementById("password").value;
+  auth.signInWithEmailAndPassword(emailVal, passVal)
+      .catch(e=>msg.innerText=e.message);
+}
+
+function logout(){ auth.signOut(); }
+
+function addPost(){
+  const text = document.getElementById("postText").value;
+  if(!text) return;
+  db.collection("posts").add({text,time:Date.now()});
+  document.getElementById("postText").value="";
+}
+
+function loadPosts(){
+  db.collection("posts").orderBy("time","desc")
+    .onSnapshot(snapshot=>{
+      posts.innerHTML="";
+      snapshot.forEach(doc=>{
+        posts.innerHTML+=`<div class="post">${doc.data().text}</div>`;
+      });
+    });
+}
+</script>
+
+</body>
+</html>
